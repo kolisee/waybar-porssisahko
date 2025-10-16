@@ -3,9 +3,9 @@ Displays current price in c/kWh, tooltip shows all prices and daily averages.
 
 API json from URL gets updated daily (2PM EET). Script downloads new json automatically when needed.
 
-Fetched from [Website](https://porssisahko.net/)
+Fetched from [https://porssisahko.net/](https://porssisahko.net/)
 
-[Direct API URL](https://api.porssisahko.net/v2/latest-prices.json)
+API URL: [https://api.porssisahko.net/v2/latest-prices.json](https://api.porssisahko.net/v2/latest-prices.json)
 
 ## Requirements
 - GNU/Linux
