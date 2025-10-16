@@ -1,13 +1,10 @@
 #!/bin/sh
 
-# update waybar every 15 minutes
+# update waybar module every quarter hour
 # crontab -e:
 #     */15 0-23 * * * (pkill -SIGRTMIN+21 waybar)
 
-echo '{ "text": "starting" }'
-ARGS=($@)
-
-# v1 hourly prices, v2 quarterly prices
+# v1 for hourly prices, v2 for quarterly prices
 JSON_API_URL="https://api.porssisahko.net/v2/latest-prices.json"
 JSON_FILE="$HOME/.cache/latest-prices.json"
 FORMATTED_FILE="$HOME/.cache/latest-prices-formatted"
@@ -19,11 +16,6 @@ CURRENT_HOUR=$(date +"%H:00")
 CURRENT_TIME=$(date +%R)
 
 NORMAL_UPPER=8
-
-debug()
-{
-  echo "$1" >> $HOME/.cache/porssi_debug.txt
-}
 
 # downloader functions
 
@@ -67,26 +59,30 @@ write_formatted()
 
 check_updates()
 {
-  local latest_startDate latest now modded_day modded_hour
+  local latest_startDate latest now modded_day modded_hour current_hour
   # check json file: date modified
   modded_day=$(date -d "$(stat -c "%y" $JSON_FILE)" +"%F")
-  modded_hour=$(date -d "$(stat -c "%y" $JSON_FILE)" +"%H")
+  modded_hour=$(date -d "$(stat -c "%y" $JSON_FILE)" +"%-H")
+  current_hour=$(date +"%-H")
   latest_startDate=$(jq -r '.prices.[0].startDate' $JSON_FILE | awk -F'[-T:]' '{ printf "%s-%s-%s\n", $1,$2,$3 }')
-  if ! [ -f "$JSON_FILE" ]; then
+  if ! [ -f "$JSON_FILE" ] || ! [ -f "$FORMATTED_FILE" ]; then
     download_and_format
   # if unset or empty string
   elif [ -z ${latest_startDate:+x} ]; then
     download_and_format
-  # new prices available after 2pm daily
-  elif [[ "$modded_day" = "$TODAY" && $modded_hour -lt 14  && "${CURRENT_HOUR:0:2}" -gt "14" ]] || ! [[ "$modded_day" = "$TODAY" ]]; then
-   download_and_format
-  elif ! [ -f "$FORMATTED_FILE" ]; then
-    write_formatted
+  # get new json after 2pm if current json is old enough
+  elif [[ $modded_day = $TODAY ]] && (($modded_hour < 14)) && ((current_hour >= 14)); then
+    download_and_format
+  elif [[ $modded_day = $YESTERDAY ]] && (($modded_hour < 14)); then
+    download_and_format
+  elif [[ ! $modded_day = $TODAY ]] && [[ ! $modded_day = $YESTERDAY ]]; then
+    download_and_format
   fi
 }
 
 download_and_format()
 {
+  echo '{ "text": "fetching.." }'
   curl -s $JSON_API_URL | jq . > $JSON_FILE
   write_formatted
 }
@@ -236,6 +232,7 @@ get_current_quarterly_value_from_line()
 
 while : ; do
   if timeout 10 true >/dev/tcp/8.8.8.8/53; then
+    echo '{ "text": "checking.." }'
     check_updates
     break
   else
@@ -254,7 +251,7 @@ for e in "${TODAY_PRICES[@]}"; do
 done
 
 TODAY_AVG_PRICE=$(echo "$TODAY_TOTAL_PRICE" "${#TODAY_PRICES[@]}" | awk '{printf "%.3f", $1 / ($2 * 4)}')
-TODAY_AVG_PRICE="Today avg: <span color='$(value_to_color $TODAY_AVG_PRICE)'>$TODAY_AVG_PRICE</span>"
+TODAY_AVG_PRICE="Today avg   : <span color='$(value_to_color $TODAY_AVG_PRICE)'>$TODAY_AVG_PRICE</span> c/kWh"
 
 if [ -x "$(command -v waybar-porssisahko)" ]; then
   TODAY_HOURLY_FORMAT=$(waybar-porssisahko $FORMATTED_FILE | \
@@ -279,7 +276,7 @@ if ((${#TOMORROW_PRICES[@]} > 0)); then
   done
 
   TOMORROW_AVG_PRICE=$(echo "$TOMORROW_TOTAL_PRICE" "${#TOMORROW_PRICES[@]}" | awk '{printf "%.3f", $1 / ($2 * 4)}')
-  TOMORROW_AVG_PRICE="Tomorrow avg: <span color='$(value_to_color $TOMORROW_AVG_PRICE)'>$TOMORROW_AVG_PRICE</span>"
+  TOMORROW_AVG_PRICE="Tomorrow avg: <span color='$(value_to_color $TOMORROW_AVG_PRICE)'>$TOMORROW_AVG_PRICE</span> c/kWh"
 
   if [ -x "$(command -v waybar-porssisahko)" ]; then
     TOMORROW_HOURLY_FORMAT=$(waybar-porssisahko $FORMATTED_FILE | \

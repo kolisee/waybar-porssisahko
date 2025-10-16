@@ -1,29 +1,25 @@
-# Waybar pörssisähkö module
-Shows current price in c/kWh, tooltip shows 48h prices.
+# Waybar module for SDAC electricity spot prices
+Displays current price in c/kWh, tooltip shows all prices and daily averages.
 
-Refreshes itself when clicked.
+API json from URL gets updated daily (2PM EET). Script downloads new json automatically when needed.
 
-Recommended to compile waybar-porssisahko.c for that extra parsing speed (bash arithmetics is slow).
+Fetched from [Website](https://porssisahko.net/)
 
-API json from URL gets updated daily (2PM EET). Script downloads new json automatically.
+[Direct API URL](https://api.porssisahko.net/v2/latest-prices.json)
 
 ## Requirements
 - GNU/Linux
 - Waybar
 - Internet connection
 - command-line utilities: jq
-- gcc for compiling
+- gcc for compiling (optional, recommended)
 
 ## Installation
-Compile `waybar-porssisahko.c` with gcc:
-- `gcc waybar-porssisahko.c -o waybar-porssisahko`
-- put the executable inside any of your $PATH directories
 
 Download/copy `waybar-porssisahko.sh`
-- put it in your script folder (mine is `~/Documents/scripts/waybar-porssisahko.sh`)
+- put it in your script directory (mine is `~/Documents/scripts/waybar-porssisahko.sh`)
 
 Add module to config.jsonc (`~/.config/waybar/config.jsonc`):
-- change exec
 ```
 "custom/porssisahko": {
         "restart-interval": 3600,
@@ -36,6 +32,8 @@ Add module to config.jsonc (`~/.config/waybar/config.jsonc`):
         "signal": 21
     },
 ```
+- change exec path
+- restart-interval is 1 hour because I intended to use cronjob for precise module update
 
 Automatically update waybar module every quarter hour with cronjob:
 - run `crontab -e`
@@ -43,3 +41,7 @@ Automatically update waybar module every quarter hour with cronjob:
 - save and exit
 
 Change `"signal": 21` and `-SIGRTMIN+21` if needed.
+
+(Optional) Compile `waybar-porssisahko.c` with gcc:
+- `gcc waybar-porssisahko.c -o waybar-porssisahko`
+- put the executable inside any of your $PATH directories

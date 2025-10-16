@@ -86,6 +86,10 @@ typedef struct
 
 int main(int argc, char **argv)
 {
+  int *intptr = (int*)malloc(sizeof(int));
+  *intptr = 10;
+  free(intptr);
+  return 0;
   filestruct *fs = (filestruct *)malloc(48 * sizeof(filestruct));
   int scan_val, year, month, day, hours, minutes;
   float float1, float2, float3, float4;
