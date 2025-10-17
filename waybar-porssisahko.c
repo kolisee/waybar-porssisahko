@@ -12,27 +12,27 @@
 
 #define UPPER_LIMIT 8
 
-char *value_to_rgb(float *fvalue)
+char value_to_rgb(float fvalue)
 {
   char *newstring, *ret = NULL;
   char *red_hex, *green_hex, *blue_hex;
   int red_int, green_int, blue_int;
 
   // no overflows
-  if (*fvalue >= INT_MAX)
+  if (fvalue >= INT_MAX)
   {
-    *fvalue = INT_MAX;
+    fvalue = INT_MAX;
   }
-  else if (*fvalue <= INT_MIN)
+  else if (fvalue <= INT_MIN)
   {
-    *fvalue = INT_MIN;
+    fvalue = INT_MIN;
   }
 
   // clamp int, not checking overflows ofc
-  red_int = (*fvalue * UPPER_LIMIT * 4);
+  red_int = (fvalue * UPPER_LIMIT * 4);
   red_int = (red_int > 0 ? (red_int < 255 ? red_int : 255) : 0); 
 
-  green_int = (255 - ((*fvalue- UPPER_LIMIT) * UPPER_LIMIT * 4));
+  green_int = (255 - ((fvalue- UPPER_LIMIT) * UPPER_LIMIT * 4));
   green_int = (green_int > 0 ? (green_int < 255 ? green_int : 255) : 0); 
 
   blue_int = 0;
@@ -51,16 +51,17 @@ char *value_to_rgb(float *fvalue)
   }
 
   // allocate len + 1 (1 for '\0')
-  ret = malloc(ns_len + 1);
+  // ret = malloc(ns_len + 1);
   // strcpy adds '\0'
-  strcpy(ret, newstring);
+  // strcpy(ret, newstring);
+  ret = newstring;
 
 end_value_to_rgb:
   free(red_hex);
   free(green_hex);
   free(blue_hex);
   free(newstring);
-  return ret;
+  return *ret;
 }
 
 // Example:                       Allocation Type:     Read/Write:    Storage Location:   Memory Used (Bytes):
@@ -78,24 +79,21 @@ typedef struct
   int fs_day;
   int fs_hours;
   int fs_minutes;
-  char fs_float1[50];
-  char fs_float2[50];
-  char fs_float3[50];
-  char fs_float4[50];
+  char fs_float1[32];
+  char fs_float2[32];
+  char fs_float3[32];
+  char fs_float4[32];
 } filestruct;
 
 int main(int argc, char **argv)
 {
-  int *intptr = (int*)malloc(sizeof(int));
-  *intptr = 10;
-  free(intptr);
-  return 0;
   filestruct *fs = (filestruct *)malloc(48 * sizeof(filestruct));
   int scan_val, year, month, day, hours, minutes;
   float float1, float2, float3, float4;
   int index = 0;
   
-  const char *filename = argv[1]; 
+  const char *filename = argv[1];
+  printf("%s",argv[1]);
   FILE *filestream = fopen(filename, "r");
   if (filestream == NULL) {
     perror("Error");
@@ -106,17 +104,17 @@ int main(int argc, char **argv)
   {
     if (scan_val != 9) break;
     char *float1_str_final, *float2_str_final, *float3_str_final, *float4_str_final;
-    char *float1_rgb, *float2_rgb, *float3_rgb, *float4_rgb;
+    char float1_rgb, float2_rgb, float3_rgb, float4_rgb;
     
-    float1_rgb = value_to_rgb(&float1);
-    float2_rgb = value_to_rgb(&float2);
-    float3_rgb = value_to_rgb(&float3);
-    float4_rgb = value_to_rgb(&float4);
+    float1_rgb = value_to_rgb(float1);
+    float2_rgb = value_to_rgb(float2);
+    float3_rgb = value_to_rgb(float3);
+    float4_rgb = value_to_rgb(float4);
 
-    asprintf(&float1_str_final, "<span color='%s'>%.3f</span>", float1_rgb, float1);
-    asprintf(&float2_str_final, "<span color='%s'>%.3f</span>", float2_rgb, float2);
-    asprintf(&float3_str_final, "<span color='%s'>%.3f</span>", float3_rgb, float3);
-    asprintf(&float4_str_final, "<span color='%s'>%.3f</span>", float4_rgb, float4);
+    asprintf(&float1_str_final, "<span color='%s'>%.3f</span>", &float1_rgb, float1);
+    asprintf(&float2_str_final, "<span color='%s'>%.3f</span>", &float2_rgb, float2);
+    asprintf(&float3_str_final, "<span color='%s'>%.3f</span>", &float3_rgb, float3);
+    asprintf(&float4_str_final, "<span color='%s'>%.3f</span>", &float4_rgb, float4);
 
     fs[index].fs_year = year;
     fs[index].fs_month = month;
@@ -127,11 +125,6 @@ int main(int argc, char **argv)
     strcpy(fs[index].fs_float2,float2_str_final);
     strcpy(fs[index].fs_float3,float3_str_final);
     strcpy(fs[index].fs_float4,float4_str_final);
-
-    free(float1_rgb);
-    free(float2_rgb);
-    free(float3_rgb);
-    free(float4_rgb);
 
     free(float1_str_final);
     free(float2_str_final);

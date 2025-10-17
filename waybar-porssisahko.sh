@@ -14,8 +14,8 @@ TOMORROW=$(date +%F --date='tomorrow')
 YESTERDAY=$(date +%F --date='yesterday')
 CURRENT_HOUR=$(date +"%H:00")
 CURRENT_TIME=$(date +%R)
-
-NORMAL_UPPER=8
+exit 0
+UPPER_LIMIT=8
 
 # downloader functions
 
@@ -70,11 +70,16 @@ check_updates()
   # if unset or empty string
   elif [ -z ${latest_startDate:+x} ]; then
     download_and_format
-  # get new json after 2pm if current json is old enough
+  # current json from today before 2pm, new available today after 2pm
   elif [[ $modded_day = $TODAY ]] && (($modded_hour < 14)) && ((current_hour >= 14)); then
     download_and_format
+  # current json from yesterday, new available today after 2pm
+  elif [[ $modded_day = $YESTERDAY ]] && ((current_hour >= 14)); then
+    download_and_format
+  # current json from yesterday before 2pm
   elif [[ $modded_day = $YESTERDAY ]] && (($modded_hour < 14)); then
     download_and_format
+  # current json from at least nudiustertian
   elif [[ ! $modded_day = $TODAY ]] && [[ ! $modded_day = $YESTERDAY ]]; then
     download_and_format
   fi
@@ -111,9 +116,9 @@ value_to_color()
 {
   local val_int red_raw blue_raw green_raw red green blue
   val_int=$(echo "scale=0; $1 / 1" | bc)
-  red_raw=$(echo "$val_int * $NORMAL_UPPER * 4" | bc)
+  red_raw=$(echo "$val_int * $UPPER_LIMIT * 4" | bc)
   blue_raw=0
-  green_raw=$(echo "255 - (($val_int - $NORMAL_UPPER) * $NORMAL_UPPER * 4)" | bc)
+  green_raw=$(echo "255 - (($val_int - $UPPER_LIMIT) * $UPPER_LIMIT * 4)" | bc)
   red=$(clamp_to_hex $red_raw)
   green=$(clamp_to_hex $green_raw)
   blue=$(clamp_to_hex $blue_raw)
