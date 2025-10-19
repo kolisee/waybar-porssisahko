@@ -12,27 +12,28 @@
 
 #define UPPER_LIMIT 8
 
-char value_to_rgb(float fvalue)
+void value_to_rgb(char *ptr_value, float input_float)
 {
-  char *newstring, *ret = NULL;
+  char *new_string = NULL;
   char *red_hex, *green_hex, *blue_hex;
+
   int red_int, green_int, blue_int;
 
   // no overflows
-  if (fvalue >= INT_MAX)
+  if (input_float >= INT_MAX)
   {
-    fvalue = INT_MAX;
+    input_float = INT_MAX;
   }
-  else if (fvalue <= INT_MIN)
+  else if (input_float <= INT_MIN)
   {
-    fvalue = INT_MIN;
+    input_float = INT_MIN;
   }
 
   // clamp int, not checking overflows ofc
-  red_int = (fvalue * UPPER_LIMIT * 4);
+  red_int = (input_float * UPPER_LIMIT * 4);
   red_int = (red_int > 0 ? (red_int < 255 ? red_int : 255) : 0); 
 
-  green_int = (255 - ((fvalue- UPPER_LIMIT) * UPPER_LIMIT * 4));
+  green_int = (255 - ((input_float- UPPER_LIMIT) * UPPER_LIMIT * 4));
   green_int = (green_int > 0 ? (green_int < 255 ? green_int : 255) : 0); 
 
   blue_int = 0;
@@ -43,25 +44,23 @@ char value_to_rgb(float fvalue)
   asprintf(&green_hex, "%02X", green_int);
   asprintf(&blue_hex, "%02X", blue_int);
 
-  size_t ns_len = asprintf(&newstring, "#%s%s%s", red_hex, green_hex, blue_hex);
+  size_t ns_len = asprintf(&new_string, "#%s%s%s", red_hex, green_hex, blue_hex);
   if (ns_len == -1)
   {
     printf("asprintf ns_len error");
     goto end_value_to_rgb;
   }
 
-  // allocate len + 1 (1 for '\0')
-  // ret = malloc(ns_len + 1);
-  // strcpy adds '\0'
-  // strcpy(ret, newstring);
-  ret = newstring;
+  // change ret_value
+  strcpy(ptr_value, new_string);
 
 end_value_to_rgb:
   free(red_hex);
   free(green_hex);
   free(blue_hex);
-  free(newstring);
-  return *ret;
+  free(new_string);
+  red_hex = green_hex = blue_hex = new_string = NULL;
+  return;
 }
 
 // Example:                       Allocation Type:     Read/Write:    Storage Location:   Memory Used (Bytes):
@@ -79,10 +78,10 @@ typedef struct
   int fs_day;
   int fs_hours;
   int fs_minutes;
-  char fs_float1[32];
-  char fs_float2[32];
-  char fs_float3[32];
-  char fs_float4[32];
+  char fs_float1[50];
+  char fs_float2[50];
+  char fs_float3[50];
+  char fs_float4[50];
 } filestruct;
 
 int main(int argc, char **argv)
@@ -91,30 +90,33 @@ int main(int argc, char **argv)
   int scan_val, year, month, day, hours, minutes;
   float float1, float2, float3, float4;
   int index = 0;
+
   
   const char *filename = argv[1];
-  printf("%s",argv[1]);
+  printf("argv[1]: %s\n",argv[1]);
   FILE *filestream = fopen(filename, "r");
   if (filestream == NULL) {
     perror("Error");
+    free(fs);
     return 1;
   }
   while (EOF != (scan_val = fscanf(filestream, "%04d-%02d-%02d %02d:%02d %f %f %f %f[^\n]\n", 
             &year, &month, &day, &hours, &minutes, &float1, &float2, &float3, &float4)))
   {
     if (scan_val != 9) break;
-    char *float1_str_final, *float2_str_final, *float3_str_final, *float4_str_final;
-    char float1_rgb, float2_rgb, float3_rgb, float4_rgb;
     
-    float1_rgb = value_to_rgb(float1);
-    float2_rgb = value_to_rgb(float2);
-    float3_rgb = value_to_rgb(float3);
-    float4_rgb = value_to_rgb(float4);
+    char *float1_str_final, *float2_str_final, *float3_str_final, *float4_str_final;
+    char float1_rgb[20], float2_rgb[20], float3_rgb[20], float4_rgb[20];
 
-    asprintf(&float1_str_final, "<span color='%s'>%.3f</span>", &float1_rgb, float1);
-    asprintf(&float2_str_final, "<span color='%s'>%.3f</span>", &float2_rgb, float2);
-    asprintf(&float3_str_final, "<span color='%s'>%.3f</span>", &float3_rgb, float3);
-    asprintf(&float4_str_final, "<span color='%s'>%.3f</span>", &float4_rgb, float4);
+    value_to_rgb(float1_rgb, float1);
+    value_to_rgb(float2_rgb, float2);
+    value_to_rgb(float3_rgb, float3);
+    value_to_rgb(float4_rgb, float4);
+
+    asprintf(&float1_str_final, "<span color='%s'>%.3f</span>", float1_rgb, float1);
+    asprintf(&float2_str_final, "<span color='%s'>%.3f</span>", float2_rgb, float2);
+    asprintf(&float3_str_final, "<span color='%s'>%.3f</span>", float3_rgb, float3);
+    asprintf(&float4_str_final, "<span color='%s'>%.3f</span>", float4_rgb, float4);
 
     fs[index].fs_year = year;
     fs[index].fs_month = month;
@@ -145,6 +147,7 @@ int main(int argc, char **argv)
   }
 
 clean_up:
+
   free(fs);
   fs = NULL;
   fclose(filestream);
