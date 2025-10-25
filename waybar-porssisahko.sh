@@ -16,6 +16,7 @@ CURRENT_HOUR=$(date +"%H:00")
 CURRENT_TIME=$(date +%R)
 UPPER_LIMIT=8
 
+
 # downloader functions
 
 write_formatted()
@@ -23,6 +24,9 @@ write_formatted()
   if ! [ -f "$FORMATTED_FILE" ]; then
     touch "$FORMATTED_FILE"
   fi
+
+  # truncate file
+  true > "$FORMATTED_FILE"
 
   local formatted_price
   formatted_price=()
@@ -41,19 +45,24 @@ write_formatted()
   done
 
   # lump quarterly prices together
-  local day hour
-  declare -A formatted_price_lumped
-  for element in "${formatted_price_reversed[@]}"; do
-    day=${element:8:2}
-    hour=${element:11:2}
-    if ((${#formatted_price_lumped["$day$hour"]} == 0)); then
-      formatted_price_lumped["$day$hour"]="$element"
-    else
-      formatted_price_lumped["$day$hour"]="${formatted_price_lumped["$day$hour"]} ${element:16}"
-    fi
-  done
-  
-  printf "%s\n" "${formatted_price_lumped[@]}" | sort -n -k12 > $FORMATTED_FILE
+local day hour lump_index
+lump_index=0
+declare -A formatted_price_lumped
+for element in "${formatted_price_reversed[@]}"; do
+  day=${element:8:2}
+  hour=${element:11:2}
+  current_index_len=${#formatted_price_lumped[$lump_index]}
+  if ((${#formatted_price_lumped[$lump_index]} == 0)); then
+    formatted_price_lumped[$lump_index]="$element"
+  elif [[ ${formatted_price_lumped[$lump_index]:11:2} =~ "$hour" ]] && ((current_index_len < 43)); then
+    formatted_price_lumped[$lump_index]="${formatted_price_lumped[$lump_index]} ${element:16}"
+  else
+    lump_index=$((lump_index + 1))
+    formatted_price_lumped[$lump_index]="$element"
+  fi
+done
+
+  for i in $(seq 0 ${#formatted_price_lumped[@]}); do echo "${formatted_price_lumped[$i]}" >> "$FORMATTED_FILE"; done
 }
 
 check_updates()
@@ -63,17 +72,18 @@ check_updates()
   modded_day=$(date -d "$(stat -c "%y" "$JSON_FILE")" +"%F")
   modded_hour=$(date -d "$(stat -c "%y" "$JSON_FILE")" +"%-H")
   current_hour=$(date +"%-H")
+  current_minutes=$(date +"%-M")
   latest_startDate=$(jq -r '.prices.[0].startDate' "$JSON_FILE" | awk -F'[-T:]' '{ printf "%s-%s-%s\n", $1,$2,$3 }')
   if ! [ -f "$JSON_FILE" ] || ! [ -f "$FORMATTED_FILE" ]; then
     download_and_format
   # if unset or empty string
-  elif [ -z ${latest_startDate:+x} ]; then
+  elif [ -z ${latest_startDate:+x} ] || [[ $latest_startDate = "$YESTERDAY" ]]; then
     download_and_format
   # current json from today before 2pm, new available today after 2pm
-  elif [[ $modded_day = "$TODAY" ]] && ((modded_hour < 14)) && ((current_hour >= 14)); then
+  elif [[ $modded_day = "$TODAY" ]] && ((modded_hour < 14)) && ((current_hour >= 14)) && ((current_minutes >= 15)); then
     download_and_format
   # current json from yesterday, new available today after 2pm
-  elif [[ $modded_day = "$YESTERDAY" ]] && ((current_hour >= 14)); then
+  elif [[ "$modded_day" = "$YESTERDAY" ]] && ((current_hour >= 14)) && ((current_minutes >= 15)); then
     download_and_format
   # current json from yesterday before 2pm
   elif [[ $modded_day = "$YESTERDAY" ]] && ((modded_hour < 14)); then
@@ -135,6 +145,9 @@ add_current_value_brackets()
       string=$(echo "$string" | sed -E "s/ (<span color='#[0-9A-F]*'>-?[[:digit:]]+\.[[:digit:]]{3}<\/span>) /[\1]/$current_value_occurrence")
     fi
   fi
+  if [[ $string =~ $TOMORROW ]] && [[ $string =~ "00:00" ]]; then
+    string=$(echo "$string" | sed "s/\(^.\)/\\n\1/")
+  fi
   echo "$string"
 }
 
@@ -151,6 +164,9 @@ add_color()
   if [[ $string =~ $TODAY ]] && [[ $string =~ $CURRENT_HOUR ]] && ((current_value_occurrence > 0)); then
     # replace Nth occurrence with sed to avoid multiple replacements
     string=$(echo "$string" | sed -E "s/ (<span color='#[0-9A-F]*'>-?[[:digit:]]+\.[[:digit:]]{3}<\/span>) /[\1]/$current_value_occurrence")
+  fi
+  if [[ $string =~ $TOMORROW ]] && [[ $string =~ "00:00" ]]; then
+    string=$(echo "$string" | sed "s/\(^.\)/\\n\1/")
   fi
   echo "$string"
 }
@@ -226,7 +242,7 @@ get_current_quarterly_value_from_line()
     echo $values | awk '{print $4}'
     ;;
     *)
-    echo "$1"
+    echo $values | awk '{print $1}'
     ;;
   esac
 }
@@ -236,12 +252,14 @@ get_current_quarterly_value_from_line()
 while : ; do
   if timeout 10 true >/dev/tcp/8.8.8.8/53; then
     echo '{ "text": "checking.." }'
-    check_updates
+    # check_updates
     break
   else
     echo '{ "text": "looping.." }'
     sleep 10s
+    
   fi
+  
 done
 
 echo '{ "text": "parsing.." }'
@@ -254,49 +272,36 @@ for e in "${TODAY_PRICES[@]}"; do
 done
 
 TODAY_AVG_PRICE=$(echo "$TODAY_TOTAL_PRICE" "${#TODAY_PRICES[@]}" | awk '{printf "%.3f", $1 / ($2 * 4)}')
-TODAY_AVG_PRICE="Today avg   : <span color='$(value_to_color "$TODAY_AVG_PRICE")'>$TODAY_AVG_PRICE</span> c/kWh"
+TODAY_AVG_PRICE="Today avg   : <span color='$(value_to_color "$TODAY_AVG_PRICE")'>$TODAY_AVG_PRICE</span> c/kWh (${#TODAY_PRICES[@]})"
 if [ -x "$(command -v waybar-porssisahko)" ]; then
-  TODAY_HOURLY_FORMAT=$(waybar-porssisahko "$FORMATTED_FILE" | \
-                      grep "$TODAY" | \
-                      awk '{print $0 "_c/kWh"}' | \
-                      column -R0 -t -s '_' -o '  ' | \
-                      while read line ; do add_current_value_brackets "$line" ; done )
+  TOOLTIP_FORMAT=$(waybar-porssisahko "$FORMATTED_FILE" | \
+                  grep -E "$TODAY|$TOMORROW" | \
+                  awk '{print $0 "_c/kWh"}' | \
+                  column -R0 -t -s '_' -o '  ' | \
+                  while read line ; do add_current_value_brackets "$line" ; done )
 else
-  TODAY_HOURLY_FORMAT=$(cat "$FORMATTED_FILE" | \
-                    grep "$TODAY" | \
-                    awk '{print $0 "  c/kWh"}' | \
-                    column -R0 -t -o '  ' | \
-                    while read line ; do add_color "$line" ; done )
+  TOOLTIP_FORMAT=$(cat "$FORMATTED_FILE" | \
+                  grep -E "$TODAY|$TOMORROW" | \
+                  awk '{print $0 "  c/kWh"}' | \
+                  column -R0 -t -o '  ' | \
+                  while read line ; do add_color "$line" ; done )
 fi
-TOOLTIP_HOURLY=$TODAY_HOURLY_FORMAT
+
 # tomorrow
 TOMORROW_PRICES=($(cat $FORMATTED_FILE | grep "$TOMORROW" | awk '{print $3 + $4 + $5 + $6}'))
 if ((${#TOMORROW_PRICES[@]} > 0)); then
   for e in "${TOMORROW_PRICES[@]}"; do
     TOMORROW_TOTAL_PRICE=$(echo "$TOMORROW_TOTAL_PRICE" "$e" | awk '{print $1 + $2}')
   done
-
   TOMORROW_AVG_PRICE=$(echo "$TOMORROW_TOTAL_PRICE" "${#TOMORROW_PRICES[@]}" | awk '{printf "%.3f", $1 / ($2 * 4)}')
-  TOMORROW_AVG_PRICE="Tomorrow avg: <span color='$(value_to_color "$TOMORROW_AVG_PRICE")'>$TOMORROW_AVG_PRICE</span> c/kWh"
-
-  if [ -x "$(command -v waybar-porssisahko)" ]; then
-    TOMORROW_HOURLY_FORMAT=$(waybar-porssisahko "$FORMATTED_FILE" | \
-                          grep "$TOMORROW" | \
-                          awk '{print $0 "_c/kWh"}' | \
-                          column -R0 -t -s '_' -o '  ')
-  else
-    TOMORROW_HOURLY_FORMAT=$(cat "$FORMATTED_FILE" | \
-                          grep "$TOMORROW" | \
-                          awk '{print $0 "  c/kWh"}' | \
-                          column -R0 -t -o '  ' | \
-                          while read line ; do add_color "$line" ; done )
-  fi
-
-  TOOLTIP_HOURLY="$TODAY_AVG_PRICE\n$TOMORROW_AVG_PRICE\n\n$TOOLTIP_HOURLY\n\n$TOMORROW_HOURLY_FORMAT"
+  TOMORROW_AVG_PRICE="Tomorrow avg: <span color='$(value_to_color "$TOMORROW_AVG_PRICE")'>$TOMORROW_AVG_PRICE</span> c/kWh (${#TOMORROW_PRICES[@]}h)"
+  TOOLTIP_FORMAT="$TODAY_AVG_PRICE\n$TOMORROW_AVG_PRICE\n\n$TOOLTIP_FORMAT"
 fi
 
-CURRENT=$(cat "$FORMATTED_FILE" | grep -E "$TODAY[[:space:]]+$CURRENT_HOUR" | while read line ; do get_current_quarterly_value_from_line "$line" ; done)
+CURRENT=$(cat "$FORMATTED_FILE" | \
+          grep -E "${TODAY}[[:space:]]+${CURRENT_HOUR}" | \
+          while read line ; do get_current_quarterly_value_from_line "$line" ; done)
 COLOR=$(value_to_color "$CURRENT")
 CURRENT="<span color='${COLOR}'>${CURRENT}</span> c/kWh"
 
-printf '{ "text":"%s","tooltip":"%s" }' "$CURRENT" "$TOOLTIP_HOURLY" | awk '{printf "%s\\n", $0}'
+printf '{ "text":"%s","tooltip":"%s" }' "$CURRENT" "$TOOLTIP_FORMAT" | awk '{printf "%s\\n", $0}'
