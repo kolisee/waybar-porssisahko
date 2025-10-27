@@ -252,7 +252,7 @@ get_current_quarterly_value_from_line()
 while : ; do
   if timeout 10 true >/dev/tcp/8.8.8.8/53; then
     echo '{ "text": "checking.." }'
-    # check_updates
+    check_updates
     break
   else
     echo '{ "text": "looping.." }'
